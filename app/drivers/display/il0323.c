@@ -224,6 +224,61 @@ static void *il0323_get_framebuffer(const struct device *dev)
 {
 	LOG_ERR("not supported");
 	return NULL;
+static int il0323_clear_and_write_buffer(const struct device *dev, uint8_t pattern, bool update) {
+    struct display_buffer_descriptor desc = {
+        .buf_size = IL0323_NUMOF_PAGES,
+        .width = EPD_PANEL_WIDTH,
+        .height = 1,
+        .pitch = EPD_PANEL_WIDTH,
+    };
+    uint8_t *line;
+
+    line = k_malloc(IL0323_NUMOF_PAGES);
+    if (line == NULL) {
+        return -ENOMEM;
+    }
+
+    memset(line, pattern, IL0323_NUMOF_PAGES);
+    for (int i = 0; i < EPD_PANEL_HEIGHT; i++) {
+        il0323_write(dev, 0, i, &desc, line);
+    }
+
+    k_free(line);
+
+    if (update == true) {
+        if (il0323_update_display(dev)) {
+            return -EIO;
+        }
+    }
+
+    return 0;
+}
+
+static int il0323_blanking_off(const struct device *dev) {
+    struct il0323_data *driver = dev->data;
+
+    if (blanking_on) {
+        /* Update EPD pannel in normal mode */
+        il0323_busy_wait(driver);
+        if (il0323_clear_and_write_buffer(dev, 0xff, true)) {
+            return -EIO;
+        }
+    }
+
+    blanking_on = false;
+
+    return 0;
+}
+
+static int il0323_blanking_on(const struct device *dev) {
+    blanking_on = true;
+
+    return 0;
+}
+
+static void *il0323_get_framebuffer(const struct device *dev) {
+    LOG_ERR("not supported");
+    return NULL;
 }
 
 static int il0323_set_brightness(const struct device *dev,
@@ -468,3 +523,5 @@ DEVICE_AND_API_INIT(il0323, DT_INST_LABEL(0), il0323_init,
 		    &il0323_driver, NULL,
 		    POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY,
 		    &il0323_driver_api);
+DEVICE_DT_INST_DEFINE(0, il0323_init, NULL, &il0323_driver, NULL, POST_KERNEL,
+                      CONFIG_APPLICATION_INIT_PRIORITY, &il0323_driver_api);
